@@ -104,11 +104,93 @@ def select_record(
     return result
 
 
-def update_record():
-    """Обновляет поля существующей записи по идентификатору или фильтру."""
-    pass
+def update_record(
+    student_id: int | None = None,
+    first_name: str | None = None,
+    second_name: str | None = None,
+    age: int | None = None,
+    sex: str | None = None,
+    new_first_name: str | None = None,
+    new_second_name: str | None = None,
+    new_age: int | None = None,
+    new_sex: str | None = None,
+) -> list[StudentRecord]:
+    """
+    Обновляет записи, подходящие под фильтр.
+    Возвращает список обновлённых записей.
+    """
+    
+    updated_records = []
 
+    for i, record in enumerate(Student):
 
-def delete_record():
-    """Удаляет запись из таблицы по идентификатору или фильтру."""
-    pass
+        if student_id is not None and record[0] != student_id:
+            continue
+
+        if first_name is not None and record[1] != first_name:
+            continue
+
+        if second_name is not None and record[2] != second_name:
+            continue
+
+        if age is not None and record[3] != age:
+            continue
+
+        if sex is not None and record[4] != sex:
+            continue
+
+        # Новые значения (если None → оставить старое)
+        new_record = (
+            record[0],
+            new_first_name.strip() if new_first_name is not None else record[1],
+            new_second_name.strip() if new_second_name is not None else record[2],
+            new_age if new_age is not None else record[3],
+            new_sex.strip() if new_sex is not None else record[4],
+        )
+
+        # Проверка возраста
+        if new_record[3] < 0:
+            raise ValueError("Возраст не может быть отрицательным.")
+
+        # Замена записи
+        Student[i] = new_record
+        updated_records.append(new_record)
+
+    return updated_records
+
+def delete_record(
+    student_id: int | None = None,
+    first_name: str | None = None,
+    second_name: str | None = None,
+    age: int | None = None,
+    sex: str | None = None,
+) -> list[StudentRecord]:
+    """
+    Удаляет записи по фильтру.
+    Возвращает список удалённых записей.
+    """
+    to_delete = []
+
+    for record in Student:
+        if student_id is not None and record[0] != student_id:
+            continue
+
+        if first_name is not None and record[1] != first_name:
+            continue
+
+        if second_name is not None and record[2] != second_name:
+            continue
+
+        if age is not None and record[3] != age:
+            continue
+
+        if sex is not None and record[4] != sex:
+            continue
+
+        to_delete.append(record)
+
+    # Удаляем найденные записи
+    for record in to_delete:
+        Student.remove(record)
+
+    return to_delete
