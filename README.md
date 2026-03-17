@@ -36,4 +36,4 @@ cd C:\Users\...\...\pioa-m60-107bv-25
 ```
 python -m src.db
 ```
-![meme.jpeg](images/meme.jpeg)
+![meme.jpg](images/meme.jpg)
