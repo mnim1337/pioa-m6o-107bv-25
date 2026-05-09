@@ -121,7 +121,7 @@ def update_record(
     """
     
     updated_records = []
-
+    
     for i, record in enumerate(Student):
 
         if student_id is not None and record[0] != student_id:

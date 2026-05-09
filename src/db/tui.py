@@ -103,6 +103,7 @@ def _find_students_by_filter() -> None:
     )
 
     _print_records(records)
+
 def _update_student() -> None:
     print("\nОбновление записи (Enter = пропустить поле)")
 
@@ -112,12 +113,23 @@ def _update_student() -> None:
     age = _read_optional_int("age: ")
     sex = input("sex: ").strip() or None
 
+    filters = [student_id, first_name, second_name, age, sex]
+    if not any(f is not None for f in filters):
+        print("Ошибка: Необходимо указать хотя бы один критерий поиска.")
+        return
+
     print("\nНовые значения (Enter = оставить без изменений)")
 
     new_first_name = input("new_first_name: ").strip() or None
     new_second_name = input("new_second_name: ").strip() or None
     new_age = _read_optional_int("new_age: ")
     new_sex = input("new_sex: ").strip() or None
+
+    # Доп. проверка: указаны ли новые данные для обновления
+    new_values = [new_first_name, new_second_name, new_age, new_sex]
+    if not any(v is not None for v in new_values):
+        print("Новые значения не введены. Не обновлю")
+        return
 
     try:
         updated = update_record(
@@ -136,6 +148,7 @@ def _update_student() -> None:
 
     except ValueError as exc:
         print(f"Ошибка: {exc}")
+
 def _delete_student() -> None:
     print("\nУдаление записи (Enter = пропустить поле)")
 
@@ -144,6 +157,16 @@ def _delete_student() -> None:
     second_name = input("second_name: ").strip() or None
     age = _read_optional_int("age: ")
     sex = input("sex: ").strip() or None
+
+    filters = [student_id, first_name, second_name, age, sex]
+    if not any(f is not None for f in filters):
+        print("Ошибка: Необходимо указать хотя бы один критерий поиска")
+        return
+    
+    confirm = input("\nВы уверены, что хотите удалить записи? (y/n): ")
+    if confirm != 'y':
+        print("Удаление отменено.")
+        return
 
     deleted = delete_record(
         student_id=student_id,
@@ -155,6 +178,7 @@ def _delete_student() -> None:
 
     print("\nУдалённые записи:")
     _print_records(deleted)
+
 def run() -> None:
     """
     Запускает основной цикл текстового пользовательского интерфейса.
