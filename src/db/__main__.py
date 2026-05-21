@@ -1,8 +1,9 @@
-from .tui import run
+from .tui import StudentUI
 
 
 def main():
-    run()
+    m = StudentUI()
+    m.run()
 
 
 if __name__ == "__main__":
