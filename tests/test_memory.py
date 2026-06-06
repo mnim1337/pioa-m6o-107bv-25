@@ -188,7 +188,22 @@ class TestMemory(unittest.TestCase):
             
             # Проверяем, что изменения применились в базе
             self.assertEqual(self.student_table.select_record(age=21), [(3, "Alice", "Johnson", 21, "M")])
+    
+    def test_update_record_sex(self):
+        test_datas = [
+            (1, "John", "Doe", 20, "M"),
+            (2, "Jane", "Smith", 22, "F"),
+        ]
+        for test_data in test_datas:
+            self.student_table.create_record(*test_data)
+ 
+        with self.subTest(name="Обновление одного студента по полу"):
+            updated = self.student_table.update_record(sex="M", new_age=28)
+            self.assertEqual(updated, [(1, "John", "Doe", 28, "M")])
             
+            # Проверяем, что изменения применились в базе
+            self.assertEqual(self.student_table.select_record(sex="M"), [(1, "John", "Doe", 28, "M")])
+
     def test_update_record_negative_age(self):
         self.student_table.create_record(1, "John", "Doe", 20, "M")
         error_message = "Возраст не может быть отрицательным."
@@ -206,6 +221,7 @@ class TestMemory(unittest.TestCase):
             (3, "Alice", "Johnson", 19, "F"),
             (4, "Bob", "Brown", 21, "M"),
             (5, "Charlie", "Davis", 18, "M"),
+            (6, "Ivy", "Anderson", 23, "F"),
         ]
 
         for test_data in test_datas:
@@ -226,6 +242,10 @@ class TestMemory(unittest.TestCase):
         # 4. Удаляем по возрасту
         res4 = self.student_table.delete_record(age=21)
         self.assertEqual(res4, [(4, "Bob", "Brown", 21, "M")])
+
+        # 4. Удаляем по полу
+        res5 = self.student_table.delete_record(sex="F")
+        self.assertEqual(res5, [(6, "Ivy", "Anderson", 23, "F")])
 
         expected_remaining = [
         (5, "Charlie", "Davis", 18, "M")
