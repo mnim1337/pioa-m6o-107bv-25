@@ -1,7 +1,8 @@
 # tests/test_memory.py
 import unittest
-from src.db.backend.memory import StudentTable
-from src.db.backend.error import InvalidAgeError, DuplicateIDError
+from src.db.backend.memory import StudentTable, MemoryDatabase
+from src.db.backend.error import InvalidAgeError, DuplicateIDError, TableNotFoundError
+from src.db.backend.table import Table
 
 
 class TestMemory(unittest.TestCase):
@@ -254,3 +255,40 @@ class TestMemory(unittest.TestCase):
         records = self.student_table.select_record()
 
         self.assertEqual(records, expected_remaining)
+    
+class TestMemoryDatabase(unittest.TestCase):
+
+    def setUp(self):
+        self.db = MemoryDatabase()
+
+    def test_init(self):
+        self.assertEqual(self.db.tables, {})
+
+    def test_table_exists_false(self):
+        self.assertFalse(self.db._table_exists("students"))
+
+    def test_table_exists_true(self):
+        table = Table(("id", "name"))
+        self.db._save_table("students", table)
+
+        self.assertTrue(self.db._table_exists("students"))
+
+    def test_save_table(self):
+        table = Table(("id", "name"))
+
+        self.db._save_table("students", table)
+
+        self.assertIn("students", self.db.tables)
+        self.assertIs(self.db.tables["students"], table)
+
+    def test_load_table(self):
+        table = Table(("id", "name"))
+        self.db._save_table("students", table)
+
+        loaded_table = self.db._load_table("students")
+
+        self.assertIs(loaded_table, table)
+
+    def test_load_nonexistent_table_raises_error(self):
+        with self.assertRaises(TableNotFoundError):
+            self.db._load_table("students")

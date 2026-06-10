@@ -1,181 +1,257 @@
-# tests/test_ui.py
-
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from src.db.tui import StudentUI, t
+from src.db.tui import StudentUI
+from src.db.backend.error import TableAlreadyExistsError
 
 
-class TestStudentUI(unittest.TestCase):
+class TestStudentUIInit(unittest.TestCase):
+    def test_init_uses_memory_database_by_default(self):
+        with patch("builtins.input", return_value="1"), patch("src.db.tui.MemoryDatabase") as MockMemory, patch(
+            "src.db.tui.FileDatabase"
+        ) as MockFile:
+            mock_db = MockMemory.return_value
 
-    def setUp(self):
-        self.ui = StudentUI()
+            ui = StudentUI()
 
-        # очищаем таблицу перед каждым тестом
-        try:
-            t.delete_record(student_id=None)
-        except Exception:
-            pass
-    
-    @patch("builtins.print")
-    def test_print_menu(self, mock_print):
-        self.ui._print_menu()
-
-        mock_print.assert_any_call("\n=== База студентов ===")
-        mock_print.assert_any_call("1. Добавить запись")
-        mock_print.assert_any_call("2. Показать все записи")
-        mock_print.assert_any_call("3. Найти записи по фильтру")
-        mock_print.assert_any_call("4. Обновить запись")
-        mock_print.assert_any_call("5. Удалить запись")
-        mock_print.assert_any_call("0. Выход")
-
-        self.assertEqual(mock_print.call_count, 7)
-
-    @patch("builtins.input", side_effect=[
-        "1",         # id
-        "John",      # first_name
-        "Doe",       # second_name
-        "20",        # age
-        "M"          # sex
-    ])
-    def test_add_student(self, mock_input):
-        self.ui._add_student()
-
-        result = t.select_record(student_id=1)
-
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0], (1, "John", "Doe", 20, "M"))
-
-    @patch("builtins.input", side_effect=[
-        "1",         # id фильтр
-        "",          # first_name
-        "",          # second_name
-        "",          # age
-        ""           # sex
-    ])
-    def test_find_student_by_id(self, mock_input):
-        t.create_record(1, "John", "Doe", 20, "M")
-
-        with patch.object(self.ui, "_print_records") as mock_print:
-            self.ui._find_students_by_filter()
-
-            mock_print.assert_called_once_with(
-                [(1, "John", "Doe", 20, "M")]
+            MockMemory.assert_called_once()
+            MockFile.assert_not_called()
+            self.assertIs(ui.database, mock_db)
+            mock_db.create_table.assert_called_once_with(
+                "students",
+                ("student_id", "first_name", "second_name", "age", "sex"),
             )
 
-    @patch("builtins.input", side_effect=[
-        "1",         # id
-        "",          # first_name
-        "",          # second_name
-        "",          # age
-        "",          # sex
+    def test_init_uses_file_database_when_choice_is_2(self):
+        with patch("builtins.input", return_value="2"), patch("src.db.tui.MemoryDatabase") as MockMemory, patch(
+            "src.db.tui.FileDatabase"
+        ) as MockFile:
+            mock_db = MockFile.return_value
 
-        "Jack",      # new_first_name
-        "",          # new_second_name
-        "",          # new_age
-        ""           # new_sex
-    ])
-    def test_update_student(self, mock_input):
-        t.create_record(1, "John", "Doe", 20, "M")
+            ui = StudentUI()
 
-        self.ui._update_student()
+            MockFile.assert_called_once()
+            MockMemory.assert_not_called()
+            self.assertIs(ui.database, mock_db)
+            mock_db.create_table.assert_called_once_with(
+                "students",
+                ("student_id", "first_name", "second_name", "age", "sex"),
+            )
 
-        result = t.select_record(student_id=1)
+    def test_init_ignores_table_already_exists_error(self):
+        with patch("builtins.input", return_value="1"), patch("src.db.tui.MemoryDatabase") as MockMemory:
+            mock_db = MockMemory.return_value
+            mock_db.create_table.side_effect = TableAlreadyExistsError("already exists")
+
+            ui = StudentUI()
+
+            self.assertIs(ui.database, mock_db)
+            mock_db.create_table.assert_called_once()
+
+
+class TestStudentUIHelpers(unittest.TestCase):
+    def setUp(self):
+        self.ui = StudentUI.__new__(StudentUI)
+        self.ui.table_name = "students"
+        self.ui.columns = ("student_id", "first_name", "second_name", "age", "sex")
+        self.ui.database = MagicMock()
+
+    def test_read_int_retries_until_valid(self):
+        with patch("builtins.input", side_effect=["abc", "5"]), patch("builtins.print") as mock_print:
+            result = self.ui._read_int("id: ")
+
+        self.assertEqual(result, 5)
+        mock_print.assert_called_once_with("Ошибка: введите целое число.")
+
+    def test_read_optional_int_returns_none_for_empty_input(self):
+        with patch("builtins.input", return_value=""):
+            result = self.ui._read_optional_int("age: ")
+
+        self.assertIsNone(result)
+
+    def test_read_optional_int_retries_until_valid(self):
+        with patch("builtins.input", side_effect=["qwe", "12"]), patch("builtins.print") as mock_print:
+            result = self.ui._read_optional_int("age: ")
+
+        self.assertEqual(result, 12)
+        mock_print.assert_called_once_with("Ошибка: введите целое число или оставьте поле пустым.")
+
+    def test_build_filters_ignores_empty_fields(self):
+        with patch.object(self.ui, "_read_optional_int", side_effect=[10, None]), patch(
+            "builtins.input",
+            side_effect=["John", "", "M"],
+        ):
+            filters = self.ui._build_filters()
 
         self.assertEqual(
-            result[0],
-            (1, "Jack", "Doe", 20, "M")
+            filters,
+            {
+                "student_id": 10,
+                "first_name": "John",
+                "sex": "M",
+            },
         )
 
-    @patch("builtins.input", side_effect=[
-        "1",     # id
-        "",      # first_name
-        "",      # second_name
-        "",      # age
-        "",      # sex
-        "y"      # подтверждение
-    ])
-    def test_delete_student(self, mock_input):
-        t.create_record(1, "John", "Doe", 20, "M")
 
-        self.ui._delete_student()
+class TestStudentUIActions(unittest.TestCase):
+    def setUp(self):
+        self.ui = StudentUI.__new__(StudentUI)
+        self.ui.table_name = "students"
+        self.ui.columns = ("student_id", "first_name", "second_name", "age", "sex")
+        self.ui.database = MagicMock()
 
-        result = t.select_record(student_id=1)
+    def test_add_student_success(self):
+        self.ui.database.select_records.return_value = []
 
-        self.assertEqual(result, [])
+        with patch.object(self.ui, "_read_int", side_effect=[1, 20]), patch(
+            "builtins.input",
+            side_effect=["Ivan", "Petrov", "M"],
+        ), patch("builtins.print") as mock_print:
+            self.ui._add_student()
 
-    @patch("builtins.input", side_effect=[
-        "", "", "", "", ""
-    ])
-    @patch("builtins.print")
-    def test_delete_without_filters(self, mock_print, mock_input):
-        self.ui._delete_student()
-
+        self.ui.database.select_records.assert_called_once_with("students", student_id=1)
+        self.ui.database.insert_record.assert_called_once_with(
+            "students",
+            {
+                "student_id": 1,
+                "first_name": "Ivan",
+                "second_name": "Petrov",
+                "age": 20,
+                "sex": "M",
+            },
+        )
         mock_print.assert_any_call(
-            "Ошибка: Необходимо указать хотя бы один критерий поиска"
+            "Запись добавлена: {'student_id': 1, 'first_name': 'Ivan', 'second_name': 'Petrov', 'age': 20, 'sex': 'M'}"
         )
 
-    @patch("builtins.input", side_effect=[
-        "", "", "", "", "",
+    def test_add_student_negative_age(self):
+        self.ui.database.select_records.return_value = []
 
-        "Jack", "", "", ""
-    ])
-    @patch("builtins.print")
-    def test_update_without_filters(self, mock_print, mock_input):
-        self.ui._update_student()
+        with patch.object(self.ui, "_read_int", side_effect=[1, -5]), patch(
+            "builtins.input",
+            side_effect=["Ivan", "Petrov", "M"],
+        ), patch("builtins.print") as mock_print:
+            self.ui._add_student()
 
-        mock_print.assert_any_call(
-            "Ошибка: Необходимо указать хотя бы один критерий поиска."
+        self.ui.database.insert_record.assert_not_called()
+        self.assertTrue(
+            any("Ошибка: Возраст не может быть отрицательным." in str(args[0]) for args, _ in mock_print.call_args_list)
         )
 
-    @patch("builtins.input", side_effect=["0"])
-    @patch("builtins.print")
-    def test_run_exit(self, mock_print, mock_input):
-        self.ui.run()
+    def test_add_student_duplicate_id(self):
+        self.ui.database.select_records.return_value = [{"student_id": 1}]
+
+        with patch.object(self.ui, "_read_int", side_effect=[1, 20]), patch(
+            "builtins.input",
+            side_effect=["Ivan", "Petrov", "M"],
+        ), patch("builtins.print") as mock_print:
+            self.ui._add_student()
+
+        self.ui.database.insert_record.assert_not_called()
+        self.assertTrue(
+            any("Ошибка: Запись с id=1 уже существует." in str(args[0]) for args, _ in mock_print.call_args_list)
+        )
+
+    def test_show_all_students(self):
+        self.ui.database.select_records.return_value = [
+            {"student_id": 1, "first_name": "Ivan"},
+            {"student_id": 2, "first_name": "Anna"},
+        ]
+
+        with patch("builtins.print") as mock_print:
+            self.ui._show_all_students()
+
+        self.ui.database.select_records.assert_called_once_with("students")
+        mock_print.assert_any_call("\nСписок записей")
+        mock_print.assert_any_call({"student_id": 1, "first_name": "Ivan"})
+        mock_print.assert_any_call({"student_id": 2, "first_name": "Anna"})
+
+    def test_find_students_by_filter(self):
+        self.ui.database.select_records.return_value = [{"student_id": 1}]
+
+        with patch.object(self.ui, "_build_filters", return_value={"student_id": 1}), patch(
+            "builtins.print"
+        ) as mock_print:
+            self.ui._find_students_by_filter()
+
+        self.ui.database.select_records.assert_called_once_with("students", student_id=1)
+        mock_print.assert_any_call("\nПоиск по фильтру (Enter = пропустить поле)")
+        mock_print.assert_any_call({"student_id": 1})
+
+    def test_update_student_without_filters(self):
+        with patch.object(self.ui, "_build_filters", return_value={}), patch("builtins.print") as mock_print:
+            self.ui._update_student()
+
+        self.ui.database.update_records.assert_not_called()
+        mock_print.assert_any_call("Ошибка: необходимо указать хотя бы один критерий поиска.")
+
+    def test_update_student_success(self):
+        self.ui.database.update_records.return_value = [{"student_id": 1, "first_name": "Updated"}]
+
+        with patch.object(self.ui, "_build_filters", return_value={"student_id": 1}), patch(
+            "builtins.input",
+            side_effect=["Updated", "", "M"],
+        ), patch.object(self.ui, "_read_optional_int", return_value=21), patch("builtins.print") as mock_print:
+            self.ui._update_student()
+
+        self.ui.database.update_records.assert_called_once_with(
+            "students",
+            {"student_id": 1},
+            {"first_name": "Updated", "age": 21, "sex": "M"},
+        )
+        mock_print.assert_any_call({"student_id": 1, "first_name": "Updated"})
+
+    def test_delete_student_cancelled(self):
+        with patch.object(self.ui, "_build_filters", return_value={"student_id": 1}), patch(
+            "builtins.input",
+            return_value="n",
+        ), patch("builtins.print") as mock_print:
+            self.ui._delete_student()
+
+        self.ui.database.delete_records.assert_not_called()
+        mock_print.assert_any_call("Удаление отменено.")
+
+    def test_delete_student_success(self):
+        self.ui.database.delete_records.return_value = [{"student_id": 1}]
+
+        with patch.object(self.ui, "_build_filters", return_value={"student_id": 1}), patch(
+            "builtins.input",
+            return_value="y",
+        ), patch("builtins.print") as mock_print:
+            self.ui._delete_student()
+
+        self.ui.database.delete_records.assert_called_once_with("students", {"student_id": 1})
+        mock_print.assert_any_call("\nУдалённые записи:")
+        mock_print.assert_any_call({"student_id": 1})
+
+
+class TestStudentUIRun(unittest.TestCase):
+    def test_run_exits_on_zero(self):
+        ui = StudentUI.__new__(StudentUI)
+        ui._print_menu = MagicMock()
+        ui._add_student = MagicMock()
+        ui._show_all_students = MagicMock()
+        ui._find_students_by_filter = MagicMock()
+        ui._update_student = MagicMock()
+        ui._delete_student = MagicMock()
+
+        with patch("builtins.input", side_effect=["0"]), patch("builtins.print") as mock_print:
+            ui.run()
 
         mock_print.assert_any_call("Выход из программы.")
+        ui._print_menu.assert_called_once()
+        ui._add_student.assert_not_called()
 
-    @patch.object(StudentUI, "_add_student")
-    @patch("builtins.input", side_effect=["1", "0"])
-    def test_run_add_student(self, mock_input, mock_add_student):
-        self.ui.run()
+    def test_run_handles_unknown_command(self):
+        ui = StudentUI.__new__(StudentUI)
+        ui._print_menu = MagicMock()
+        ui._add_student = MagicMock()
+        ui._show_all_students = MagicMock()
+        ui._find_students_by_filter = MagicMock()
+        ui._update_student = MagicMock()
+        ui._delete_student = MagicMock()
 
-        mock_add_student.assert_called_once()
+        with patch("builtins.input", side_effect=["9", "0"]), patch("builtins.print") as mock_print:
+            ui.run()
 
-    @patch.object(StudentUI, "_show_all_students")
-    @patch("builtins.input", side_effect=["2", "0"])
-    def test_run_show_all_students(self, mock_input, mock_show):
-        self.ui.run()
-
-        mock_show.assert_called_once()
-
-    @patch.object(StudentUI, "_find_students_by_filter")
-    @patch("builtins.input", side_effect=["3", "0"])
-    def test_run_find_students(self, mock_input, mock_find):
-        self.ui.run()
-
-        mock_find.assert_called_once()
-
-    @patch.object(StudentUI, "_update_student")
-    @patch("builtins.input", side_effect=["4", "0"])
-    def test_run_update_student(self, mock_input, mock_update):
-        self.ui.run()
-
-        mock_update.assert_called_once()
-    
-    @patch.object(StudentUI, "_delete_student")
-    @patch("builtins.input", side_effect=["5", "0"])
-    def test_run_delete_student(self, mock_input, mock_delete):
-        self.ui.run()
-
-        mock_delete.assert_called_once()
-    
-    @patch("builtins.input", side_effect=["6", "0"])
-    @patch("builtins.print")
-    def test_run_unknown_command(self, mock_print, mock_input):
-        self.ui.run()
-
-        mock_print.assert_any_call(
-            "Неизвестная команда. Повторите ввод."
-        )
-    
+        mock_print.assert_any_call("Неизвестная команда. Повторите ввод.")
