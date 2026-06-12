@@ -139,6 +139,11 @@ class StudentUI:
         new_first_name = input("new_first_name: ").strip() or None
         new_second_name = input("new_second_name: ").strip() or None
         new_age = self._read_optional_int("new_age: ")
+
+        if new_age is not None and new_age < 0:
+            print("Возраст не может быть отрицательным.")
+            return
+
         new_sex = input("new_sex: ").strip() or None
 
         updates = {}
@@ -154,11 +159,11 @@ class StudentUI:
         if not updates:
             print("Новые значения не введены.")
             return
-
+        
         try:
             updated = self.database.update_records(self.table_name, filters, updates)
             self._print_records(updated)
-        except ValueError as exc:
+        except (ValueError, InvalidAgeError) as exc:
             print(f"Ошибка: {exc}")
 
     def _delete_student(self) -> None:

@@ -1,5 +1,6 @@
 # src/db/backend/file.py
 import json
+import os
 from pathlib import Path
 
 from .database import Database
@@ -31,6 +32,10 @@ class FileDatabase(Database):
             raise InvalidStorageDataError(
                 "Файл таблицы содержит некорректный JSON."
             ) from error
+        except OSError as error:
+            raise InvalidStorageDataError(
+                f"Ошибка чтения файла: {error}"
+            ) from error
 
         return self._deserialize_table(data)
 
@@ -46,8 +51,11 @@ class FileDatabase(Database):
             )
 
     def _get_table_path(self, table_name: str) -> Path:
-        return self.directory / f"{table_name}.json"
-
+        safe_name = os.path.basename(table_name)
+        if safe_name != table_name or not safe_name:
+            raise InvalidStorageDataError(f"Недопустимое имя таблицы: {table_name}")
+        return self.directory / f"{safe_name}.json"
+    
     def _serialize_table(self, table: Table) -> dict:
         return {
             "columns": list(table.columns),
@@ -60,6 +68,23 @@ class FileDatabase(Database):
                 "Файл таблицы имеет некорректную структуру."
             )
 
-        columns = tuple(data["columns"])
-        records = data.get("records", [])
-        return Table(columns, records)
+        columns_data = data["columns"]
+        records_data = data["records"]
+
+        # Валидация типов
+        if not isinstance(columns_data, list):
+            raise InvalidStorageDataError("Поле 'columns' должно быть списком.")
+        if not all(isinstance(col, str) for col in columns_data):
+            raise InvalidStorageDataError("Имена колонок должны быть строками.")
+        if not isinstance(records_data, list):
+            raise InvalidStorageDataError("Поле 'records' должно быть списком.")
+
+        columns = tuple(columns_data)
+        # Каждая запись должна быть словарём
+        validated_records = []
+        for record in records_data:
+            if not isinstance(record, dict):
+                raise InvalidStorageDataError("Каждая запись должна быть словарём.")
+            validated_records.append(record)
+
+        return Table(columns, validated_records)
