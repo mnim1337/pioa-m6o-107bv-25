@@ -1,0 +1,25 @@
+{
+  "columns": [
+    "student_id",
+    "first_name",
+    "second_name",
+    "age",
+    "sex"
+  ],
+  "records": [
+    {
+      "student_id": 1,
+      "first_name": "Иван",
+      "second_name": "Иванов",
+      "age": 45,
+      "sex": "м"
+    },
+    {
+      "student_id": 2,
+      "first_name": "Илья",
+      "second_name": "Мазяка",
+      "age": 23,
+      "sex": "м"
+    }
+  ]
+}
