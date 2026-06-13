@@ -12,8 +12,14 @@ class FileDatabase(Database):
     """База данных, которая хранит таблицы в JSON-файлах."""
 
     def __init__(self, directory: str = "data") -> None:
-        self.directory = Path(directory)
-        self.directory.mkdir(parents=True, exist_ok=True)
+        self.directory = Path(directory).resolve()
+
+        try:
+            self.directory.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            raise InvalidStorageDataError(
+                f"Не удалось создать директорию хранилища: {self.directory}"
+            ) from error
 
     def _table_exists(self, table_name: str) -> bool:
         return self._get_table_path(table_name).exists()
@@ -42,13 +48,18 @@ class FileDatabase(Database):
     def _save_table(self, table_name: str, table: Table) -> None:
         table_path = self._get_table_path(table_name)
 
-        with table_path.open("w", encoding="utf-8") as file:
-            json.dump(
-                self._serialize_table(table),
-                file,
-                ensure_ascii=False,
-                indent=2,
-            )
+        try:
+            with table_path.open("w", encoding="utf-8") as file:
+                json.dump(
+                    self._serialize_table(table),
+                    file,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+        except OSError as error:
+            raise InvalidStorageDataError(
+                f"Ошибка записи файла: {error}"
+            ) from error
 
     def _get_table_path(self, table_name: str) -> Path:
         safe_name = os.path.basename(table_name)

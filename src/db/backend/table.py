@@ -1,6 +1,6 @@
 from typing import Any
 
-from .error import MissingColumnError, UnknownColumnError
+from .error import MissingColumnError, UnknownColumnError, InvalidAgeError, DuplicateIDError
 
 
 class Table:
@@ -15,7 +15,7 @@ class Table:
                 self.insert_record(record)
 
     def insert_record(self, record: dict[str, Any]) -> None:
-        """Добавляет запись, если она соответствует схеме таблицы."""
+        """Добавляет запись, если она соответствует схеме таблицы и правилам валидации."""
         # Проверяем, что все обязательные поля присутствуют
         missing_columns = [column for column in self.columns if column not in record]
         if missing_columns:
@@ -29,6 +29,16 @@ class Table:
             raise UnknownColumnError(
                 f"Поле '{extra_columns[0]}' не определено в структуре таблицы."
             )
+        
+        if "age" in record and record["age"] < 0:
+            raise InvalidAgeError("Возраст не может быть отрицательным.")
+
+        if "student_id" in record:
+            student_id = record["student_id"]
+            # Ищем, есть ли уже запись с таким же student_id в self.records
+            id_exists = any(existing_record.get("student_id") == student_id for existing_record in self.records)
+            if id_exists:
+                raise DuplicateIDError(f"Запись с id={student_id} уже существует.")
 
         self.records.append(record.copy())
 
@@ -55,6 +65,10 @@ class Table:
 
     def update_records(self, filters: dict[str, Any], updates: dict[str, Any]) -> list[dict[str, Any]]:
         """Обновляет записи, соответствующие фильтрам."""
+
+        if not filters:
+            raise ValueError("Необходимо указать хотя бы один фильтр.")
+
         # Проверяем поля фильтров
         unknown_filters = [key for key in filters if key not in self.columns]
         if unknown_filters:
@@ -82,7 +96,10 @@ class Table:
 
     def delete_records(self, filters: dict[str, Any]) -> list[dict[str, Any]]:
         """Удаляет записи, соответствующие фильтрам."""
-        # Проверяем поля фильтров
+
+        if not filters:
+            raise ValueError("Необходимо указать хотя бы один фильтр.")
+
         unknown_filters = [key for key in filters if key not in self.columns]
         if unknown_filters:
             raise UnknownColumnError(
